@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>METEOR SHIELD — Fireball Defense</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Georgia', serif; }
+#gameContainer { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+#webcam { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 1; }
+#gameCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+#handCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+
+#startScreen {
+  position: absolute; inset: 0; z-index: 10;
+  background: linear-gradient(180deg, #0a0010 0%, #1a0520 40%, #2d0a10 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2rem;
+}
+.game-title {
+  font-size: clamp(3rem, 8vw, 7rem);
+  font-weight: 900;
+  color: #ff6a00;
+  text-shadow: 0 0 40px #ff4400, 0 0 80px #ff2200, 0 0 120px #ff0000;
+  letter-spacing: 0.1em;
+  text-align: center;
+  line-height: 1;
+  animation: titlePulse 2s ease-in-out infinite;
+}
+.game-subtitle {
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  color: #ff9944;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+@keyframes titlePulse {
+  0%,100% { text-shadow: 0 0 40px #ff4400, 0 0 80px #ff2200; }
+  50% { text-shadow: 0 0 60px #ff6600, 0 0 120px #ff4400, 0 0 200px #ff2200; }
+}
+.instructions-box {
+  background: rgba(255,100,0,0.08);
+  border: 1px solid rgba(255,100,0,0.3);
+  border-radius: 16px;
+  padding: 2rem 3rem;
+  display: flex; flex-direction: column; gap: 1rem;
+  max-width: 500px;
+}
+.instructions-box p {
+  color: #ffcc88;
+  font-size: 1.1rem;
+  display: flex; align-items: center; gap: 1rem;
+}
+.instructions-box p span { font-size: 1.4rem; }
+#startBtn {
+  background: linear-gradient(135deg, #ff4400, #ff8800);
+  border: none; color: white; font-size: 1.4rem;
+  padding: 1rem 3rem; border-radius: 50px;
+  cursor: pointer; letter-spacing: 0.2em; font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: 0 0 30px rgba(255,80,0,0.6);
+  transition: all 0.2s;
+}
+#startBtn:hover { transform: scale(1.05); box-shadow: 0 0 50px rgba(255,80,0,0.9); }
+
+#countdownScreen {
+  position: absolute; inset: 0; z-index: 9;
+  background: rgba(0,0,0,0.6);
+  display: none; align-items: center; justify-content: center;
+}
+#countdownNum {
+  font-size: 30vw; font-weight: 900;
+  color: rgba(255,120,0,0.7);
+  text-shadow: 0 0 100px rgba(255,60,0,0.9);
+  animation: countPulse 0.8s ease-out;
+}
+@keyframes countPulse {
+  0% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+#ui {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 8;
+  padding: 1.2rem 2rem;
+  display: none;
+  justify-content: space-between; align-items: flex-start;
+}
+#timerBox {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,120,0,0.4);
+  border-radius: 12px; padding: 0.6rem 1.5rem;
+  color: #ff9944; font-size: 2rem; font-weight: 700;
+  text-shadow: 0 0 20px #ff6600;
+  letter-spacing: 0.1em;
+}
+#cityHealthBox {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem;
+}
+#cityHealthLabel { color: #ff9944; font-size: 0.8rem; letter-spacing: 0.2em; text-transform: uppercase; }
+#cityHealthBar {
+  width: 200px; height: 12px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,120,0,0.3);
+  border-radius: 6px; overflow: hidden;
+}
+#cityHealthFill {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, #ff4400, #ffaa00);
+  border-radius: 6px;
+  transition: width 0.5s ease, background 0.5s;
+}
+#scoreBox {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,120,0,0.4);
+  border-radius: 12px; padding: 0.6rem 1.5rem;
+  color: #ff9944; font-size: 1.2rem; font-weight: 700;
+  text-align: center;
+}
+
+#endScreen {
+  position: absolute; inset: 0; z-index: 10;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2rem;
+}
+#endTitle {
+  font-size: clamp(4rem, 12vw, 10rem);
+  font-weight: 900; letter-spacing: 0.1em;
+  animation: endAppear 1s ease-out;
+}
+#endSubtitle { font-size: 1.5rem; color: rgba(255,255,255,0.7); letter-spacing: 0.2em; }
+#restartBtn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: white; font-size: 1.2rem;
+  padding: 0.8rem 2.5rem; border-radius: 50px;
+  cursor: pointer; letter-spacing: 0.2em;
+  transition: all 0.2s;
+}
+#restartBtn:hover { background: rgba(255,255,255,0.25); }
+@keyframes endAppear {
+  0% { transform: scale(0.5); opacity: 0; }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+#gestureHint {
+  position: absolute; bottom: 250px; left: 50%; transform: translateX(-50%);
+  z-index: 8; color: rgba(255,180,80,0.7);
+  font-size: 0.9rem; letter-spacing: 0.15em;
+  text-align: center; display: none;
+}
+
+.city-section-overlay {
+  position: absolute; bottom: 0; z-index: 5; pointer-events: none;
+}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <video id="webcam" autoplay muted playsinline></video>
+  <canvas id="gameCanvas"></canvas>
+  <canvas id="handCanvas"></canvas>
+
+  <div id="startScreen">
+    <div class="game-subtitle">DEFEND YOUR CITY</div>
+    <div class="game-title">METEOR<br>SHIELD</div>
+    <div class="instructions-box">
+      <p><span>🤲</span> Cup both hands together to charge a fireball</p>
+      <p><span>🔥</span> Hold the pose — fireball grows while charging</p>
+      <p><span>👋</span> Flick/open your hand fast to launch it</p>
+      <p><span>🏙️</span> Protect the city for 2 minutes to win</p>
+    </div>
+    <button id="startBtn" onclick="initGame()">START GAME</button>
+  </div>
+
+  <div id="countdownScreen">
+    <div id="countdownNum">3</div>
+  </div>
+
+  <div id="ui">
+    <div id="timerBox">2:00</div>
+    <div id="scoreBox">Score: <span id="scoreVal">0</span></div>
+    <div id="cityHealthBox">
+      <div id="cityHealthLabel">City Health</div>
+      <div id="cityHealthBar"><div id="cityHealthFill"></div></div>
+    </div>
+  </div>
+
+  <div id="gestureHint">👐 Cup hands to charge · Flick to throw</div>
+
+  <div id="endScreen">
+    <div id="endTitle"></div>
+    <div id="endSubtitle"></div>
+    <button id="restartBtn" onclick="restartGame()">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.min.js"></script>
+<script>
+const gameCanvas = document.getElementById('gameCanvas');
+const ctx = gameCanvas.getContext('2d');
+const handCanvas = document.getElementById('handCanvas');
+const hctx = handCanvas.getContext('2d');
+const video = document.getElementById('webcam');
+
+let W, H;
+function resize() {
+  W = gameCanvas.width = handCanvas.width = window.innerWidth;
+  H = gameCanvas.height = handCanvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game state
+let gameState = 'start';
+let cityHealth = 100;
+let score = 0;
+let timeLeft = 120;
+let gameTimer = null;
+let spawnTimer = null;
+let meteors = [];
+let fireballs = [];
+let explosions = [];
+let embers = [];
+let cityDamage = [0,0,0,0,0,0,0]; // 7 sections
+let shakeX = 0, shakeY = 0;
+let frameCount = 0;
+
+// Hand tracking state
+let handLandmarks = [];
+let fireballCharge = 0;
+let fireballActive = false;
+let fireballPos = {x: W/2, y: H/2};
+let lastPalmDist = 0;
+let throwDetected = false;
+let throwVel = {x: 0, y: 0};
+let prevPalmY = 0;
+let chargeStartTime = 0;
+
+// City layout
+const CITY_BOTTOM = H;
+const CITY_HEIGHT = H * 0.28;
+const NUM_SECTIONS = 7;
+
+// Building shapes per section (pre-generated)
+let buildings = [];
+function generateBuildings() {
+  buildings = [];
+  const secW = W / NUM_SECTIONS;
+  for (let s = 0; s < NUM_SECTIONS; s++) {
+    const x = s * secW;
+    const bArr = [];
+    let bx = x + 4;
+    while (bx < x + secW - 10) {
+      const bw = 25 + Math.random() * 35;
+      const bh = CITY_HEIGHT * (0.4 + Math.random() * 0.6);
+      bArr.push({ x: bx, w: bw, h: bh, windows: [] });
+      // Generate windows
+      for (let wy = 8; wy < bh - 10; wy += 14) {
+        for (let wx = 5; wx < bw - 8; wx += 10) {
+          bArr[bArr.length-1].windows.push({ x: wx, y: wy, lit: Math.random() > 0.3 });
+        }
+      }
+      bx += bw + 3 + Math.random() * 5;
+    }
+    buildings.push(bArr);
+  }
+}
+
+// Meteor class
+class Meteor {
+  constructor() {
+    this.x = Math.random() * W * 0.9 + W * 0.05;
+    this.y = -60;
+    this.targetX = Math.random() * W * 0.8 + W * 0.1;
+    this.targetSection = Math.floor(this.targetX / (W / NUM_SECTIONS));
+    this.size = 22 + Math.random() * 20;
+    const speed = 1.5 + (120 - timeLeft) / 60;
+    const angle = Math.atan2(H * 0.72, this.targetX - this.x);
+    this.vx = Math.cos(angle) * speed * 0.3;
+    this.vy = speed + Math.random() * 1.5;
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.08;
+    this.trail = [];
+    this.alive = true;
+    this.glowPhase = Math.random() * Math.PI * 2;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rotation += this.rotSpeed;
+    this.glowPhase += 0.1;
+    this.trail.unshift({ x: this.x, y: this.y, a: 1 });
+    if (this.trail.length > 18) this.trail.pop();
+    this.trail.forEach((t, i) => t.a = 1 - i / 18);
+    return this.y > H * 0.72;
+  }
+  draw(c) {
+    // Trail
+    this.trail.forEach((t, i) => {
+      const r = this.size * (1 - i / 18) * 0.6;
+      const g = c.createRadialGradient(t.x, t.y, 0, t.x, t.y, r);
+      g.addColorStop(0, `rgba(255,140,0,${t.a * 0.6})`);
+      g.addColorStop(0.5, `rgba(255,60,0,${t.a * 0.3})`);
+      g.addColorStop(1, `rgba(255,0,0,0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(t.x, t.y, r, 0, Math.PI*2); c.fill();
+    });
+    c.save();
+    c.translate(this.x, this.y);
+    c.rotate(this.rotation);
+    // Rock body
+    c.beginPath();
+    const pts = 8;
+    for (let i = 0; i < pts; i++) {
+      const a = (i / pts) * Math.PI * 2;
+      const r = this.size * (0.7 + Math.sin(a * 3 + this.glowPhase) * 0.15);
+      i === 0 ? c.moveTo(Math.cos(a)*r, Math.sin(a)*r) : c.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+    }
+    c.closePath();
+    const rg = c.createRadialGradient(0, 0, 0, 0, 0, this.size);
+    rg.addColorStop(0, '#ff8844');
+    rg.addColorStop(0.4, '#883322');
+    rg.addColorStop(1, '#221108');
+    c.fillStyle = rg;
+    c.fill();
+    // Lava cracks
+    c.strokeStyle = `rgba(255,120,0,${0.4 + Math.sin(this.glowPhase)*0.3})`;
+    c.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + this.rotation;
+      c.beginPath();
+      c.moveTo(0,0);
+      c.lineTo(Math.cos(a)*this.size*0.6, Math.sin(a)*this.size*0.6);
+      c.stroke();
+    }
+    c.restore();
+  }
+}
+
+// Fireball thrown
+class ThrownFireball {
+  constructor(x, y, vx, vy) {
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.size = 28 + fireballCharge * 0.3;
+    this.alive = true;
+    this.trail = [];
+    this.phase = 0;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.phase += 0.15;
+    this.trail.unshift({ x: this.x, y: this.y });
+    if (this.trail.length > 12) this.trail.pop();
+    if (this.x < -100 || this.x > W+100 || this.y < -100 || this.y > H+100) this.alive = false;
+  }
+  draw(c) {
+    this.trail.forEach((t, i) => {
+      const r = this.size * (1 - i/12);
+      const g = c.createRadialGradient(t.x,t.y,0,t.x,t.y,r);
+      g.addColorStop(0,`rgba(255,220,80,${(1-i/12)*0.7})`);
+      g.addColorStop(0.5,`rgba(255,80,0,${(1-i/12)*0.4})`);
+      g.addColorStop(1,'rgba(255,0,0,0)');
+      c.fillStyle=g; c.beginPath(); c.arc(t.x,t.y,r,0,Math.PI*2); c.fill();
+    });
+    const g = c.createRadialGradient(this.x,this.y,0,this.x,this.y,this.size);
+    g.addColorStop(0,'#ffffff');
+    g.addColorStop(0.2,'#ffee44');
+    g.addColorStop(0.6,'#ff6600');
+    g.addColorStop(1,'rgba(255,0,0,0)');
+    c.fillStyle=g;
+    c.beginPath(); c.arc(this.x,this.y,this.size,0,Math.PI*2); c.fill();
+    // Flame wisps
+    for(let i=0;i<6;i++){
+      const a = (i/6)*Math.PI*2 + this.phase;
+      const ex = this.x + Math.cos(a)*this.size*0.8;
+      const ey = this.y + Math.sin(a)*this.size*0.8;
+      const eg = c.createRadialGradient(ex,ey,0,ex,ey,8);
+      eg.addColorStop(0,'rgba(255,200,0,0.8)');
+      eg.addColorStop(1,'rgba(255,60,0,0)');
+      c.fillStyle=eg; c.beginPath(); c.arc(ex,ey,8,0,Math.PI*2); c.fill();
+    }
+  }
+}
+
+// Explosion class
+class Explosion {
+  constructor(x, y, big) {
+    this.x = x; this.y = y;
+    this.big = big || false;
+    this.frame = 0;
+    this.maxFrame = big ? 60 : 40;
+    this.particles = [];
+    const n = big ? 30 : 15;
+    for(let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2;
+      const spd = (big?3:1.5) + Math.random()*(big?8:4);
+      this.particles.push({
+        x,y,
+        vx: Math.cos(a)*spd,
+        vy: Math.sin(a)*spd - (big?4:2),
+        size: (big?6:3)+Math.random()*(big?14:6),
+        color: ['#ff8800','#ff4400','#ffcc00','#ff2200'][Math.floor(Math.random()*4)],
+        life: 1
+      });
+    }
+  }
+  update() {
+    this.frame++;
+    this.particles.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy; p.vy+=0.15;
+      p.life = 1 - this.frame/this.maxFrame;
+      p.size *= 0.98;
+    });
+    return this.frame >= this.maxFrame;
+  }
+  draw(c) {
+    const progress = this.frame/this.maxFrame;
+    const r = (this.big?120:60)*(1-progress*0.3);
+    const g = c.createRadialGradient(this.x,this.y,0,this.x,this.y,r);
+    g.addColorStop(0,`rgba(255,220,80,${(1-progress)*0.8})`);
+    g.addColorStop(0.3,`rgba(255,100,0,${(1-progress)*0.6})`);
+    g.addColorStop(0.7,`rgba(180,40,0,${(1-progress)*0.3})`);
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle=g; c.beginPath(); c.arc(this.x,this.y,r,0,Math.PI*2); c.fill();
+    this.particles.forEach(p=>{
+      c.globalAlpha=p.life;
+      c.fillStyle=p.color;
+      c.beginPath(); c.arc(p.x,p.y,p.size,0,Math.PI*2); c.fill();
+    });
+    c.globalAlpha=1;
+  }
+}
+
+function drawCity(c) {
+  const secW = W / NUM_SECTIONS;
+  for (let s = 0; s < NUM_SECTIONS; s++) {
+    const dmg = cityDamage[s];
+    const bArr = buildings[s];
+    if (!bArr) continue;
+    bArr.forEach(b => {
+      const by = H - b.h;
+      // Building color based on damage
+      let wallColor, glowColor;
+      if (dmg === 0) { wallColor = '#1a3a4a'; glowColor = null; }
+      else if (dmg === 1) { wallColor = '#2a2a1a'; glowColor = 'rgba(255,150,0,0.2)'; }
+      else if (dmg === 2) { wallColor = '#3a1a08'; glowColor = 'rgba(255,60,0,0.4)'; }
+      else { wallColor = '#1a0800'; glowColor = 'rgba(255,0,0,0.6)'; }
+
+      c.fillStyle = wallColor;
+      c.fillRect(b.x, by, b.w, b.h);
+
+      // Border
+      c.strokeStyle = dmg > 0 ? 'rgba(255,80,0,0.3)' : 'rgba(80,160,200,0.3)';
+      c.lineWidth = 0.5;
+      c.strokeRect(b.x, by, b.w, b.h);
+
+      // Windows
+      b.windows.forEach(w => {
+        if (dmg >= 3) return;
+        const wx2 = b.x + w.x, wy2 = by + w.y;
+        if (dmg > 0 && Math.random() < 0.002) w.lit = !w.lit;
+        const wColor = dmg === 0
+          ? (w.lit ? 'rgba(180,230,255,0.9)' : 'rgba(20,40,60,0.8)')
+          : (w.lit ? 'rgba(255,150,0,0.9)' : 'rgba(40,10,0,0.8)');
+        c.fillStyle = wColor;
+        c.fillRect(wx2, wy2, 6, 5);
+      });
+
+      // Fire on damaged buildings
+      if (dmg >= 2) {
+        for (let fi = 0; fi < 3; fi++) {
+          const fx = b.x + (fi+0.5) * b.w / 3;
+          const fy = by + Math.sin(frameCount * 0.1 + fi) * 5;
+          const fg = c.createRadialGradient(fx, fy, 0, fx, fy, 20 + dmg * 10);
+          fg.addColorStop(0, `rgba(255,200,0,${0.6 + Math.sin(frameCount*0.2+fi)*0.2})`);
+          fg.addColorStop(0.4, `rgba(255,60,0,${0.4})`);
+          fg.addColorStop(1, 'rgba(255,0,0,0)');
+          c.fillStyle = fg;
+          c.beginPath(); c.arc(fx, fy, 20 + dmg*10, 0, Math.PI*2); c.fill();
+        }
+      }
+
+      // Smoke particles on damage 1+
+      if (dmg >= 1 && Math.random() < 0.05) {
+        embers.push({
+          x: b.x + Math.random() * b.w,
+          y: by,
+          vx: (Math.random()-0.5) * 0.5,
+          vy: -0.5 - Math.random(),
+          size: 2 + Math.random()*3,
+          life: 1,
+          smoke: dmg < 2
+        });
+      }
+    });
+
+    // Ground row
+    c.fillStyle = dmg > 1 ? '#2a1008' : '#0d2030';
+    c.fillRect(s * secW, H - 10, secW, 10);
+  }
+}
+
+function drawSky(c) {
+  const g = c.createLinearGradient(0, 0, 0, H * 0.7);
+  const intensity = 1 - cityHealth/100;
+  g.addColorStop(0, `rgba(8,2,20,0.7)`);
+  g.addColorStop(0.5, `rgba(${15+intensity*40},${5+intensity*5},${25+intensity*5},0.5)`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H * 0.7);
+
+  // Stars
+  if (frameCount % 3 === 0) {
+    for(let i=0;i<3;i++){
+      const sx = Math.random()*W, sy = Math.random()*H*0.5;
+      c.fillStyle = 'rgba(255,255,255,0.4)';
+      c.fillRect(sx,sy,1,1);
+    }
+  }
+}
+
+function drawEmbers(c) {
+  embers = embers.filter(e => e.life > 0.02);
+  embers.forEach(e => {
+    e.x += e.vx; e.y += e.vy;
+    e.life -= 0.008;
+    if (e.smoke) {
+      c.fillStyle = `rgba(80,80,80,${e.life * 0.3})`;
+    } else {
+      c.fillStyle = `rgba(255,${100+Math.floor(e.life*80)},0,${e.life * 0.8})`;
+    }
+    c.beginPath(); c.arc(e.x, e.y, e.size * e.life, 0, Math.PI*2); c.fill();
+  });
+}
+
+function drawChargeFireball(c) {
+  if (!fireballActive || fireballCharge < 5) return;
+  const glow = fireballCharge / 100;
+  const size = 20 + fireballCharge * 0.5;
+  const phase = frameCount * 0.15;
+
+  // Outer glow
+  const og = c.createRadialGradient(fireballPos.x, fireballPos.y, 0, fireballPos.x, fireballPos.y, size * 2.5);
+  og.addColorStop(0, `rgba(255,200,50,${glow * 0.5})`);
+  og.addColorStop(0.5, `rgba(255,80,0,${glow * 0.3})`);
+  og.addColorStop(1, 'rgba(255,0,0,0)');
+  c.fillStyle = og; c.beginPath(); c.arc(fireballPos.x, fireballPos.y, size*2.5, 0, Math.PI*2); c.fill();
+
+  // Core
+  const cg = c.createRadialGradient(fireballPos.x-size*0.2, fireballPos.y-size*0.2, 0, fireballPos.x, fireballPos.y, size);
+  cg.addColorStop(0, '#ffffff');
+  cg.addColorStop(0.15, '#ffee44');
+  cg.addColorStop(0.5, '#ff6600');
+  cg.addColorStop(1, 'rgba(255,20,0,0.1)');
+  c.fillStyle = cg; c.beginPath(); c.arc(fireballPos.x, fireballPos.y, size, 0, Math.PI*2); c.fill();
+
+  // Flame tongues
+  for(let i=0;i<8;i++){
+    const a = (i/8)*Math.PI*2 + phase;
+    const fl = size * (0.8 + Math.sin(phase*2+i*0.7)*0.3);
+    const fx = fireballPos.x + Math.cos(a)*fl;
+    const fy = fireballPos.y + Math.sin(a)*fl;
+    const fg = c.createRadialGradient(fx,fy,0,fx,fy,size*0.4);
+    fg.addColorStop(0,`rgba(255,${150+Math.floor(glow*80)},0,${0.7+glow*0.3})`);
+    fg.addColorStop(1,'rgba(255,50,0,0)');
+    c.fillStyle=fg; c.beginPath(); c.arc(fx,fy,size*0.4,0,Math.PI*2); c.fill();
+  }
+
+  // Charge ring
+  c.beginPath();
+  c.arc(fireballPos.x, fireballPos.y, size + 8 + Math.sin(phase*3)*3, 0, Math.PI*2 * (fireballCharge/100));
+  c.strokeStyle = `rgba(255,220,80,${0.5+glow*0.5})`;
+  c.lineWidth = 2; c.stroke();
+}
+
+function drawHands(c) {
+  c.clearRect(0, 0, W, H);
+  if (!handLandmarks.length) return;
+  handLandmarks.forEach(hand => {
+    const pts = hand.map(lm => ({ x: (1-lm.x)*W, y: lm.y*H }));
+    // Draw connections
+    const connections = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],
+      [5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],
+      [13,17],[17,18],[18,19],[19,20],[0,17]];
+    connections.forEach(([a,b]) => {
+      c.beginPath();
+      c.moveTo(pts[a].x, pts[a].y);
+      c.lineTo(pts[b].x, pts[b].y);
+      c.strokeStyle = fireballActive
+        ? `rgba(255,${100+fireballCharge},0,0.6)`
+        : 'rgba(255,180,80,0.4)';
+      c.lineWidth = 2; c.stroke();
+    });
+    // Knuckle dots
+    pts.forEach((p, i) => {
+      c.beginPath(); c.arc(p.x, p.y, i===0?6:3, 0, Math.PI*2);
+      c.fillStyle = fireballActive ? `rgba(255,${120+fireballCharge},0,0.8)` : 'rgba(255,160,50,0.6)';
+      c.fill();
+    });
+  });
+}
+
+// MediaPipe Hands setup
+let mpHands = null;
+function setupMediaPipe() {
+  mpHands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${f}` });
+  mpHands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.5 });
+  mpHands.onResults(onHandResults);
+  const camera = new Camera(video, {
+    onFrame: async () => { if(mpHands) await mpHands.send({image: video}); },
+    width: 640, height: 480
+  });
+  camera.start();
+}
+
+function onHandResults(results) {
+  handLandmarks = results.multiHandLandmarks || [];
+  if (gameState !== 'playing') return;
+
+  if (handLandmarks.length >= 2) {
+    const h1 = handLandmarks[0], h2 = handLandmarks[1];
+    const p1 = { x: (1-h1[9].x)*W, y: h1[9].y*H };
+    const p2 = { x: (1-h2[9].x)*W, y: h2[9].y*H };
+    const dist = Math.hypot(p2.x-p1.x, p2.y-p1.y);
+    const cx = (p1.x+p2.x)/2, cy = (p1.y+p2.y)/2;
+
+    // Detect cupping gesture (hands close together)
+    if (dist < 180) {
+      if (!fireballActive) { fireballActive = true; chargeStartTime = Date.now(); }
+      const elapsed = (Date.now() - chargeStartTime) / 1000;
+      fireballCharge = Math.min(100, elapsed * 60);
+      fireballPos = { x: cx, y: cy };
+      // Add embers around charging ball
+      if (Math.random() < 0.3) {
+        const a = Math.random()*Math.PI*2;
+        embers.push({ x: cx+Math.cos(a)*30, y: cy+Math.sin(a)*30, vx:(Math.random()-0.5)*2, vy:-1-Math.random(), size:3+Math.random()*4, life:0.8, smoke:false });
+      }
+    } else {
+      // Throw detection: was charging, now hands separated quickly
+      if (fireballActive && fireballCharge > 15) {
+        const velY = (cy - prevPalmY) * 8;
+        const velX = (cx - W/2) * 0.04;
+        fireballs.push(new ThrownFireball(fireballPos.x, fireballPos.y, velX + (Math.random()-0.5)*3, -18 + velY));
+        fireballCharge = 0;
+      }
+      fireballActive = false;
+      fireballCharge = Math.max(0, fireballCharge - 3);
+    }
+    prevPalmY = cy;
+  } else if (handLandmarks.length === 1) {
+    const h = handLandmarks[0];
+    const palm = { x: (1-h[9].x)*W, y: h[9].y*H };
+
+    // Single hand: check for fist (charge) vs open (throw)
+    const fingertips = [h[8],h[12],h[16],h[20]];
+    const knuckles = [h[5],h[9],h[13],h[17]];
+    let closed = 0;
+    fingertips.forEach((f,i)=>{
+      const fd = Math.hypot((1-f.x)*W-palm.x, f.y*H-palm.y);
+      const kd = Math.hypot((1-knuckles[i].x)*W-palm.x, knuckles[i].y*H-palm.y);
+      if(fd < kd*1.2) closed++;
+    });
+
+    if (closed >= 3) {
+      if (!fireballActive) { fireballActive = true; chargeStartTime = Date.now(); }
+      const elapsed = (Date.now() - chargeStartTime) / 1000;
+      fireballCharge = Math.min(100, elapsed * 50);
+      fireballPos = { x: palm.x, y: palm.y };
+    } else if (fireballActive && fireballCharge > 20) {
+      fireballs.push(new ThrownFireball(fireballPos.x, fireballPos.y, (palm.x - W/2)*0.05, -16));
+      fireballActive = false; fireballCharge = 0;
+    } else {
+      fireballActive = false;
+      fireballCharge = Math.max(0, fireballCharge - 2);
+    }
+    prevPalmY = palm.y;
+  } else {
+    fireballActive = false;
+    fireballCharge = Math.max(0, fireballCharge - 2);
+  }
+}
+
+// Collision detection
+function checkCollisions() {
+  fireballs.forEach(fb => {
+    meteors.forEach(m => {
+      if (!m.alive || !fb.alive) return;
+      const d = Math.hypot(fb.x-m.x, fb.y-m.y);
+      if (d < fb.size + m.size) {
+        m.alive = false; fb.alive = false;
+        explosions.push(new Explosion(m.x, m.y, true));
+        score += 10;
+        document.getElementById('scoreVal').textContent = score;
+        shakeX = 8; shakeY = 8;
+        // Embers spray
+        for(let i=0;i<20;i++){
+          const a=Math.random()*Math.PI*2;
+          embers.push({x:m.x,y:m.y,vx:Math.cos(a)*(2+Math.random()*5),vy:Math.sin(a)*(2+Math.random()*5)-3,size:4+Math.random()*6,life:1,smoke:false});
+        }
+      }
+    });
+  });
+}
+
+function meteorHitsCity(m) {
+  const sec = Math.floor(m.x / (W / NUM_SECTIONS));
+  const s = Math.max(0, Math.min(NUM_SECTIONS-1, sec));
+  cityDamage[s] = Math.min(3, cityDamage[s] + 1);
+  explosions.push(new Explosion(m.x, H * 0.72, true));
+  shakeX = 15; shakeY = 15;
+  // Recalculate city health
+  const maxDmg = NUM_SECTIONS * 3;
+  const totalDmg = cityDamage.reduce((a,b)=>a+b,0);
+  cityHealth = Math.max(0, Math.round(100 - (totalDmg/maxDmg)*100));
+  document.getElementById('cityHealthFill').style.width = cityHealth + '%';
+  const pct = cityHealth / 100;
+  document.getElementById('cityHealthFill').style.background =
+    pct > 0.6 ? 'linear-gradient(90deg,#ff4400,#ffaa00)' :
+    pct > 0.3 ? 'linear-gradient(90deg,#ff4400,#ff6600)' :
+    'linear-gradient(90deg,#ff0000,#ff3300)';
+  if (cityHealth <= 0) endGame(false);
+}
+
+function gameLoop() {
+  if (gameState !== 'playing') return;
+  frameCount++;
+
+  // Screen shake decay
+  shakeX *= 0.85; shakeY *= 0.85;
+
+  ctx.save();
+  ctx.translate(shakeX * (Math.random()-0.5), shakeY * (Math.random()-0.5));
+  ctx.clearRect(-20, -20, W+40, H+40);
+
+  drawSky(ctx);
+  drawCity(ctx);
+  drawEmbers(ctx);
+
+  // Meteors
+  meteors = meteors.filter(m => m.alive);
+  meteors.forEach(m => {
+    const hit = m.update();
+    if (hit) { m.alive = false; meteorHitsCity(m); }
+    else m.draw(ctx);
+  });
+
+  // Thrown fireballs
+  fireballs = fireballs.filter(f => f.alive);
+  fireballs.forEach(f => { f.update(); f.draw(ctx); });
+
+  checkCollisions();
+
+  // Explosions
+  explosions = explosions.filter(e => !e.update());
+  explosions.forEach(e => e.draw(ctx));
+
+  // Charging fireball
+  drawChargeFireball(ctx);
+
+  ctx.restore();
+
+  // Hand overlay
+  drawHands(hctx);
+
+  requestAnimationFrame(gameLoop);
+}
+
+function spawnMeteor() {
+  if (gameState !== 'playing') return;
+  meteors.push(new Meteor());
+  const delay = Math.max(600, 2000 - (120-timeLeft)*10);
+  spawnTimer = setTimeout(spawnMeteor, delay + Math.random()*500);
+}
+
+function updateTimer() {
+  if (gameState !== 'playing') return;
+  timeLeft--;
+  const m = Math.floor(timeLeft/60).toString().padStart(1,'0');
+  const s = (timeLeft%60).toString().padStart(2,'0');
+  document.getElementById('timerBox').textContent = m+':'+s;
+  if (timeLeft <= 0) endGame(true);
+  else if (timeLeft <= 30) document.getElementById('timerBox').style.color = '#ff4444';
+  gameTimer = setTimeout(updateTimer, 1000);
+}
+
+async function initGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('countdownScreen').style.display = 'flex';
+
+  // Start webcam
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width:1280,height:720,facingMode:'user' }, audio:false });
+    video.srcObject = stream;
+    await video.play();
+    setupMediaPipe();
+  } catch(e) {
+    console.warn('Webcam not available:', e);
+  }
+
+  generateBuildings();
+  countdown(3);
+}
+
+function countdown(n) {
+  const el = document.getElementById('countdownNum');
+  if (n === 0) {
+    el.textContent = 'GO!';
+    el.style.color = 'rgba(255,220,80,0.8)';
+    setTimeout(() => {
+      document.getElementById('countdownScreen').style.display = 'none';
+      startPlaying();
+    }, 800);
+    return;
+  }
+  el.textContent = n;
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = 'countPulse 0.8s ease-out';
+  setTimeout(() => countdown(n-1), 1000);
+}
+
+function startPlaying() {
+  gameState = 'playing';
+  document.getElementById('ui').style.display = 'flex';
+  document.getElementById('gestureHint').style.display = 'block';
+  setTimeout(()=>{ document.getElementById('gestureHint').style.display='none'; }, 5000);
+  spawnMeteor();
+  updateTimer();
+  gameLoop();
+}
+
+function endGame(won) {
+  gameState = 'ended';
+  clearTimeout(gameTimer);
+  clearTimeout(spawnTimer);
+
+  const endScreen = document.getElementById('endScreen');
+  const endTitle = document.getElementById('endTitle');
+  const endSub = document.getElementById('endSubtitle');
+
+  endScreen.style.display = 'flex';
+
+  if (won) {
+    endScreen.style.background = 'linear-gradient(180deg,rgba(20,40,10,0.9),rgba(0,20,0,0.95))';
+    endTitle.textContent = 'YOU WIN!';
+    endTitle.style.color = '#88ff44';
+    endTitle.style.textShadow = '0 0 60px #44ff00, 0 0 120px #22aa00';
+    endSub.textContent = `City Survived · Score: ${score}`;
+    // Victory: add golden embers
+    for(let i=0;i<50;i++){
+      embers.push({x:Math.random()*W,y:H*0.8,vx:(Math.random()-0.5)*3,vy:-2-Math.random()*4,size:4+Math.random()*6,life:1,smoke:false});
+    }
+  } else {
+    endScreen.style.background = 'linear-gradient(180deg,rgba(20,0,0,0.92),rgba(0,0,0,0.97))';
+    endTitle.textContent = 'GAME OVER';
+    endTitle.style.color = '#ff2200';
+    endTitle.style.textShadow = '0 0 60px #ff0000, 0 0 120px #880000';
+    endSub.textContent = `City Destroyed · Score: ${score}`;
+    explosions.push(new Explosion(W/2, H*0.6, true));
+    explosions.push(new Explosion(W*0.3, H*0.65, true));
+    explosions.push(new Explosion(W*0.7, H*0.65, true));
+  }
+}
+
+function restartGame() {
+  gameState = 'start';
+  cityHealth = 100;
+  score = 0;
+  timeLeft = 120;
+  meteors = []; fireballs = []; explosions = []; embers = [];
+  cityDamage = [0,0,0,0,0,0,0];
+  shakeX = 0; shakeY = 0; frameCount = 0;
+  fireballCharge = 0; fireballActive = false;
+  document.getElementById('cityHealthFill').style.width = '100%';
+  document.getElementById('scoreVal').textContent = '0';
+  document.getElementById('timerBox').textContent = '2:00';
+  document.getElementById('timerBox').style.color = '#ff9944';
+  document.getElementById('ui').style.display = 'none';
+  document.getElementById('endScreen').style.display = 'none';
+  document.getElementById('startScreen').style.display = 'flex';
+  generateBuildings();
+}
+
+// Keyboard fallback for testing without webcam
+document.addEventListener('keydown', e => {
+  if (gameState !== 'playing') return;
+  if (e.code === 'Space') {
+    const cx = W/2 + (Math.random()-0.5)*200;
+    const cy = H*0.5;
+    fireballs.push(new ThrownFireball(cx, cy, (Math.random()-0.5)*4, -16));
+  }
+  if (e.code === 'KeyC') {
+    fireballActive = true;
+    fireballCharge = Math.min(100, fireballCharge + 20);
+    fireballPos = { x: W/2, y: H*0.45 };
+  }
+});
+
+// Click to throw fireball (desktop fallback)
+document.getElementById('gameCanvas').addEventListener('click', e => {
+  if (gameState !== 'playing') return;
+  fireballs.push(new ThrownFireball(e.clientX, e.clientY, (Math.random()-0.5)*3, -14));
+});
+
+generateBuildings();
+// Draw idle city on canvas while on start screen
+(function idleLoop() {
+  if (gameState === 'start') {
+    ctx.clearRect(0,0,W,H);
+    frameCount++;
+    drawSky(ctx);
+    drawCity(ctx);
+    drawEmbers(ctx);
+    requestAnimationFrame(idleLoop);
+  }
+})();
+</script>
+</body>
+</html>
