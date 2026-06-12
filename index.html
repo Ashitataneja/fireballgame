@@ -596,11 +596,19 @@ function tickTimer(){
   gTimer=setTimeout(tickTimer,1000);
 }
 
-async function initGame(){
+function initGame(){
   document.getElementById('startScreen').style.display='none';
   document.getElementById('cdScreen').style.display='flex';
-  try{const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'},audio:false});vid.srcObject=s;await vid.play();setupMP();}catch(e){console.warn('No cam:',e);}
-  buildCity();countdown(3);
+  buildCity();
+  // Start webcam & MediaPipe in background — don't block countdown
+  (async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'},audio:false});
+      vid.srcObject=s;
+      vid.onloadedmetadata=()=>{vid.play().then(()=>setupMP()).catch(e=>console.warn('play err',e));};
+    }catch(e){console.warn('No cam:',e);}
+  })();
+  countdown(3);
 }
 function countdown(n){
   const el=document.getElementById('cdNum');
